@@ -49,8 +49,9 @@ export function TabsTrigger({
       type="button"
       onClick={() => ctx.onValueChange(value)}
       className={cn(
-        "app-tab",               // perus vihreä tyyli
-        active && "app-tab--active", // korostus valitulle
+        "rounded-2xl px-3 py-1.5 text-sm font-medium border transition",
+        "bg-green-800 text-white border-green-800 hover:bg-green-900",
+        active && "ring-2 ring-green-900 ring-offset-2",
         className
       )}
     >

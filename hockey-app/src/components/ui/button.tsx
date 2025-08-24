@@ -11,12 +11,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
 ) {
   const base =
     "inline-flex items-center justify-center rounded-2xl px-4 py-2 font-medium border shadow-sm transition " +
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2";
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-900";
 
-  // emme anna tässä mitään bg- tai border-luokkaa => kaikki väri tulee .app-btn:stä
+  // vihreä oletus
   const variants = {
-    default: "",
-    secondary: "",
+    default: "bg-green-800 text-white hover:bg-green-900 border-green-800",
+    secondary: "bg-green-800 text-white hover:bg-green-900 border-green-800",
     destructive: "bg-red-600 text-white hover:bg-red-700 border-red-600",
   } as const;
 
@@ -25,7 +25,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
   return (
     <button
       ref={ref}
-      className={cn(base, sizes[size], variants[variant], "app-btn", className)}
+      className={cn(base, variants[variant] ?? variants.default, sizes[size], className)}
       {...props}
     />
   );
