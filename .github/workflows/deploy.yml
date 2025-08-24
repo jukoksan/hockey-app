@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: hockey-app   # <-- koska varsinainen projekti on alikansiossa
+        working-directory: hockey-app   # projektisi alikansio
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,12 +38,15 @@ jobs:
         run: npm run build
 
       - name: Make SPA 404
-        run: cp dist/index.html dist/404.html
+        run: node -e "require('fs').copyFileSync('dist/index.html','dist/404.html')"
+
+      - name: List dist
+        run: ls -la dist
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./hockey-app/dist
+          path: hockey-app/dist   # HUOM: polku repon juuresta
 
   deploy:
     needs: build
