@@ -6,5 +6,3 @@ export default defineConfig({
   plugins: [react(), tsconfigPaths()],
   base: 'https://jukoksan.github.io/hockey-app/', 
 })
-
-
