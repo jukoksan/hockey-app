@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: hockey-app
+        working-directory: hockey-app   # <-- koska varsinainen projekti on alikansiossa
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,6 +37,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Make SPA 404
+        run: cp dist/index.html dist/404.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -46,7 +49,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: github
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages

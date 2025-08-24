@@ -1,14 +1,14 @@
 {
   "name": "hockey-app",
   "private": true,
-  "version": "0.0.5",
+  "version": "0.0.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "postbuild": "copy dist\\index.html dist\\404.html"
+    "postbuild": "node -e \"require('fs').copyFileSync('dist/index.html','dist/404.html')\""
   },
   "dependencies": {
     "@radix-ui/react-select": "^2.2.6",
