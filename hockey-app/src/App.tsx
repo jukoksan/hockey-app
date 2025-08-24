@@ -248,7 +248,7 @@ export default function App() {
         <div className="max-w-screen-md mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            <h1 className="font-semibold text-lg">Kentälliset &amp; Tulostaulu</h1>
+            <h3 className="font-semibold text-lg">Kentälliset &amp; Tulostaulu</h3>
           </div>
           <div className="flex gap-2 items-center text-xs text-slate-600">
             <Badge variant="secondary">Pelaajia: {players.length}</Badge>
@@ -268,8 +268,8 @@ export default function App() {
               <div className="md:col-span-2">
                 <label className="text-sm">Pelaajien nimet (yksi per rivi, 7–15):</label>
                 <Textarea
-                  placeholder={`Matti Meikäläinen
-Teemu Testaaja
+                  placeholder={`Pelaaja1 
+Pelaaja2
 …`}
                   value={bulkNames}
                   onChange={(e) => setBulkNames(e.target.value)}

@@ -184,3 +184,27 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+@layer components {
+  .app-btn {
+    @apply bg-green-800 text-white hover:bg-green-900 border-green-800;
+  }
+}
+@layer components {
+  .app-btn {
+    @apply bg-green-800 text-white hover:bg-green-900 border-green-800;
+  }
+  .app-tab {
+    @apply rounded-2xl px-3 py-1.5 text-sm font-medium border
+           bg-green-800 text-white border-green-800 hover:bg-green-900;
+  }
+  .app-tab--active { @apply ring-2 ring-green-900 ring-offset-2; }
+}
+/* Viimeisenä latautuva override: pakota kaikki .app-btn napit vihreiksi */
+.app-btn {
+  background-color: rgb(22 101 52) !important; /* green-800 */
+  border-color: rgb(22 101 52) !important;
+  color: white !important;
+}
+.app-btn:hover {
+  background-color: rgb(20 83 45) !important;  /* green-900 */
+}
