@@ -1,2 +1,0 @@
-# hockey-app
-Joukkue + tulostaulu
