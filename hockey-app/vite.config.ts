@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
-  base: 'https://jukoksan.github.io/hockey-app/', 
+  plugins: [react()],
+  base: '/hockey-app/',   // koska julkaiset repo-sivuna
 })
