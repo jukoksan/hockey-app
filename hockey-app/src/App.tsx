@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Textarea } from "./components/ui/textarea";
 import { Badge } from "./components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "./components/ui/select";
 
 import {
   Plus,
@@ -17,11 +17,10 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
-// Pieni apu-tyyppi
 type Player = { id: string; name: string; role: "G" | "S" };
+type Goal = { id: string; scorerId: string; scorerName?: string; team: "HOME" | "AWAY" };
 
 export default function App() {
-  // --- Perustila ---
   const [players, setPlayers] = useState<Player[]>([]);
   const [goalieId, setGoalieId] = useState<string | null>(null);
   const [lineSize, setLineSize] = useState<3 | 4>(3);
@@ -30,7 +29,11 @@ export default function App() {
   const [gf, setGf] = useState(0);
   const [ga, setGa] = useState(0);
 
-  // --- Lataa ja tallenna localStorageen ---
+  // UUTTA: maalit & scorer-valitsimen näkyvyydet
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [showHomeScorer, setShowHomeScorer] = useState(false);
+  const [showAwayScorer, setShowAwayScorer] = useState(false);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem("hockey_app_state_v1");
@@ -43,16 +46,16 @@ export default function App() {
         setBench(s.bench || []);
         setGf(typeof s.gf === "number" ? s.gf : 0);
         setGa(typeof s.ga === "number" ? s.ga : 0);
+        setGoals(Array.isArray(s.goals) ? s.goals : []); // <-- UUTTA
       }
     } catch {}
   }, []);
 
   useEffect(() => {
-    const payload = { players, goalieId, lineSize, lines, bench, gf, ga };
+    const payload = { players, goalieId, lineSize, lines, bench, gf, ga, goals };
     localStorage.setItem("hockey_app_state_v1", JSON.stringify(payload));
-  }, [players, goalieId, lineSize, lines, bench, gf, ga]);
+  }, [players, goalieId, lineSize, lines, bench, gf, ga, goals]);
 
-  // --- Syöttö: bulk-nimet ---
   const [bulkNames, setBulkNames] = useState("");
   const addBulk = () => {
     const names = bulkNames
@@ -74,13 +77,13 @@ export default function App() {
     setPlayers((p) => p.filter((x) => x.id !== id));
     setLines((LL) => LL.map((L) => L.filter((pid) => pid !== id)));
     setBench((B) => B.filter((pid) => pid !== id));
+    // ei poisteta historiamaaleja, mutta voisi halutessa suodattaa goalsista jos tekijä poistuu
   };
 
   const candidateGoalies = useMemo(() => players, [players]);
 
   const setGoalie = (id: string) => {
     setGoalieId(id);
-    // varmista että MV ei ole riveissä/penkillä
     setLines((LL) => LL.map((L) => L.filter((pid) => pid !== id)));
     setBench((B) => B.filter((pid) => pid !== id));
     setPlayers((p) =>
@@ -90,13 +93,11 @@ export default function App() {
     );
   };
 
-  // Käytettävissä olevat kenttäpelaajat (ei MV)
   const skaters = useMemo(
     () => players.filter((p) => p.id !== goalieId),
     [players, goalieId]
   );
 
-  // Jaa skaterit kenttiin tasaisesti
   const autoLines = () => {
     const ids = skaters.map((s) => s.id);
     const numLines = Math.ceil(ids.length / lineSize) || 1;
@@ -111,13 +112,11 @@ export default function App() {
     setBench(newBench);
   };
 
-  // Vaihda kentän kokoluokkaa
   const changeLineSize = (size: 3 | 4) => {
     setLineSize(size);
     setTimeout(autoLines, 0);
   };
 
-  // --- Drag & Drop ---
   const dragDataRef = useRef<{ playerId: string; from: string } | null>(null);
   const onDragStart =
     (playerId: string, from: string) => (e: React.DragEvent) => {
@@ -199,12 +198,11 @@ export default function App() {
     });
   };
 
-  // --- Import/Export ---
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const exportState = () => {
-    const data = { players, goalieId, lineSize, lines, bench, gf, ga };
+    const data = { players, goalieId, lineSize, lines, bench, gf, ga, goals }; // goals mukana
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });
@@ -228,6 +226,7 @@ export default function App() {
       setBench(Array.isArray(s.bench) ? s.bench : []);
       setGf(typeof s.gf === "number" ? s.gf : 0);
       setGa(typeof s.ga === "number" ? s.ga : 0);
+      setGoals(Array.isArray(s.goals) ? s.goals : []); // <-- UUTTA
     } catch (e) {
       alert("JSON-tuonti epäonnistui: " + (e as Error).message);
     }
@@ -240,7 +239,7 @@ export default function App() {
         .split(/\r?\n/)
         .map((r) => r.trim())
         .filter(Boolean);
-      const newPlayers: Player[] = rows.map((n) => ({
+    const newPlayers: Player[] = rows.map((n) => ({
         id: crypto.randomUUID(),
         name: n,
         role: "S",
@@ -251,7 +250,6 @@ export default function App() {
     }
   };
 
-  // Apurit
   const nameById = (id: string) => players.find((p) => p.id === id)?.name || "?";
   const goalieName = useMemo(
     () => players.find((p) => p.id === goalieId)?.name || "—",
@@ -265,7 +263,51 @@ export default function App() {
     setGa(0);
     setLines([]);
     setBench([]);
+    setGoals([]); // <-- tyhjennä maalit
+    setShowHomeScorer(false);
+    setShowAwayScorer(false);
   };
+
+  // UUSI: lisää maali (kasvattaa myös GF/GA)
+const addGoal = (team: "HOME" | "AWAY", scorerId?: string) => {
+  const scorer = players.find((p) => p.id === scorerId);
+  const newGoal: Goal = {
+    id: crypto.randomUUID(),
+    team,
+    scorerId,
+    scorerName: scorer?.name || "",  // <- nimi talteen
+  };
+  setGoals((prev) => [...prev, newGoal]);
+
+  if (team === "HOME") setGf((v) => v + 1);
+  else setGa((v) => v + 1);
+};
+
+
+// Muokattavana olevan maalin id (null = ei muokkausta)
+const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+
+// Vaihda maalintekijä (ei muuta tulostaulua, vain tekijän tiedot)
+function updateGoalScorer(goalId: string, newScorerId: string) {
+  const newName = nameById(newScorerId);
+  setGoals((prev) =>
+    prev.map((g) =>
+      g.id === goalId ? { ...g, scorerId: newScorerId, scorerName: newName } : g
+    )
+  );
+}
+
+// Poista tietty maali ja säädä GF/GA oikein
+function removeGoal(goalId: string) {
+  setGoals((prev) => {
+    const g = prev.find((x) => x.id === goalId);
+    if (!g) return prev;
+    if (g.team === "HOME") setGf((v) => Math.max(0, v - 1));
+    else setGa((v) => Math.max(0, v - 1));
+    return prev.filter((x) => x.id !== goalId);
+  });
+}
+
 
   return (
     <div
@@ -294,8 +336,8 @@ export default function App() {
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
-                <label className="text-sm">
-                  Pelaajien nimet (yksi per rivi, 7–15):
+                <label className="text-sm block mb-1 pl-5">
+                  Lisää pelaajat:
                 </label>
                 <Textarea
                   placeholder={`Pelaaja1
@@ -306,12 +348,13 @@ Pelaaja2
                 />
               </div>
               <div className="flex flex-col gap-2 pt-6">
-                <Button onClick={addBulk}>
+                <Button className="mx-1 my-1" onClick={addBulk}>
                   <Plus className="w-4 h-4 mr-1" />
                   Lisää nimet
                 </Button>
 
                 <Button
+                  className="mx-1 my-1"
                   onClick={() => {
                     setPlayers([]);
                     setGoalieId(null);
@@ -327,15 +370,13 @@ Pelaaja2
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
               <div className="space-y-1">
-                <label className="text-sm">Maalivahti</label>
-
-                {/* UUSI Select-käyttö: placeholder prop Selectiin, ei SelectValuea */}
+                <label className="text-sm block mb-1 pl-5 font-bold">Maalivahti</label>
                 <Select
                   value={goalieId || undefined}
                   onValueChange={setGoalie}
                   placeholder="Valitse maalivahti"
                 >
-                  <SelectTrigger id="goalie" />
+                  <SelectTrigger id="goalie" className="mx-1 my-1" />
                   <SelectContent>
                     <SelectGroup>
                       {candidateGoalies.map((p) => (
@@ -347,23 +388,24 @@ Pelaaja2
                   </SelectContent>
                 </Select>
 
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 leading-relaxed mt-1 mx-5">
                   Maalivahti pysyy samana eikä ole mukana kentällisissä.
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm">Kentän koko</label>
+                <label className="text-sm block mb-2 pl-2 font-bold">Kentän koko</label>
                 <Tabs
                   value={String(lineSize)}
                   onValueChange={(v) => changeLineSize(Number(v) as 3 | 4)}
                 >
-                  <TabsList>
+                    {/* Siirretty oikealle marginaalilla */}
+                    <TabsList className="ml-2">
                     <TabsTrigger value="3">3 pelaajaa</TabsTrigger>
                     <TabsTrigger value="4">4 pelaajaa</TabsTrigger>
                   </TabsList>
                 </Tabs>
-                <Button className="mt-2" onClick={autoLines}>
+                <Button className="mt-2 mx-1 my-1" onClick={autoLines}>
                   <Save className="w-4 h-4 mr-1" />
                   Muodosta kentät automaattisesti
                 </Button>
@@ -411,8 +453,8 @@ Pelaaja2
           <CardHeader>
             <CardTitle>2) Kentälliset &amp; vaihdot</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm text-slate-600">
+        <CardContent className="space-y-4">
+            <div className="text-xs text-slate-500 leading-relaxed mt-1 mx-5">
               Vedä ja pudota pelaajia kenttien ja penkin välillä. Maalivahti:{" "}
               <strong>{goalieName}</strong>.
             </div>
@@ -470,8 +512,8 @@ Pelaaja2
 
               {/* Lisää uusi kenttä */}
               <div className="rounded-2xl border bg-white p-3 flex flex-col justify-between">
-                <div className="font-medium mb-2">Uusi kenttä</div>
-                <Button onClick={() => setLines((LL) => [...LL, []])}>
+                <div className="font-medium mb-2 ml-1">Uusi kenttä</div>
+                <Button className="mx-1" onClick={() => setLines((LL) => [...LL, []])}>
                   <Plus className="w-4 h-4 mr-1" />
                   Lisää kenttä
                 </Button>
@@ -512,64 +554,166 @@ Pelaaja2
           </CardContent>
         </Card>
 
-        {/* Tulostaulu */}
+        {/* Tulostaulu + maalintekijät */}
         <Card className="rounded-2xl shadow-lg">
           <CardHeader>
             <CardTitle>3) Tulostaulu</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+              {/* KOTI */}
               <div className="rounded-xl border bg-white p-4 text-center">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">
                   KOTI
                 </div>
                 <div className="text-5xl font-bold my-2">{gf}</div>
-                <div className="flex justify-center gap-2">
-                  <Button onClick={() => setGf((v) => v + 1)}>
-                    <PlusCircle className="w-4 h-4 mr-1" />
-                    Lisää
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex justify-center gap-2">
+                    <Button onClick={() => setGf((v) => v + 1)}>
+                      <PlusCircle className="w-4 h-4 mr-1" />
+                    </Button>
+                    <Button onClick={() => setGf((v) => Math.max(0, v - 1))}>
+                      <MinusCircle className="w-4 h-4 mr-1" />
+                      
+                    </Button>
+                  </div>
+                  {/* Lisää maali + valitse tekijä */}
+                  <Button onClick={() => setShowHomeScorer((v) => !v)}>
+                    Maalintekijä
                   </Button>
-                  <Button onClick={() => setGf((v) => Math.max(0, v - 1))}>
-                    <MinusCircle className="w-4 h-4 mr-1" />
-                    Vähennä
-                  </Button>
+                  {showHomeScorer && (
+                    <Select
+                      onValueChange={(pid) => {
+                        addGoal("HOME", pid);
+                        setShowHomeScorer(false);
+                      }}
+                      placeholder="Valitse maalintekijä"
+                    >
+                      <SelectTrigger className="mx-1 my-1" />
+                      <SelectContent>
+                        <SelectGroup>
+                          {skaters.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
+
+              {/* VIERAS */}
               <div className="rounded-xl border bg-white p-4 text-center">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">
                   VIERAS
                 </div>
                 <div className="text-5xl font-bold my-2">{ga}</div>
-                <div className="flex justify-center gap-2">
-                  <Button onClick={() => setGa((v) => v + 1)}>
-                    <PlusCircle className="w-4 h-4 mr-1" />
-                    Lisää
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex justify-center gap-2">
+                    <Button onClick={() => setGa((v) => v + 1)}>
+                      <PlusCircle className="w-4 h-4 mr-1" />
+                    </Button>
+                    <Button onClick={() => setGa((v) => Math.max(0, v - 1))}>
+                      <MinusCircle className="w-4 h-4 mr-1" />
+                      
+                    </Button>
+                  </div>
+                  <Button onClick={() => setShowAwayScorer((v) => !v)}>
+                    Maalintekijä
                   </Button>
-                  <Button onClick={() => setGa((v) => Math.max(0, v - 1))}>
-                    <MinusCircle className="w-4 h-4 mr-1" />
-                    Vähennä
-                  </Button>
+                  {showAwayScorer && (
+                    <Select
+                      onValueChange={(pid) => {
+                        addGoal("AWAY", pid);
+                        setShowAwayScorer(false);
+                      }}
+                      placeholder="Valitse maalintekijä"
+                    >
+                      <SelectTrigger className="mx-1 my-1" />
+                      <SelectContent>
+                        <SelectGroup>
+                          {skaters.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
+
+              {/* TILANNE */}
               <div className="rounded-xl border bg-white p-4 text-center">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">
                   TILANNE
                 </div>
                 <div className="text-4xl font-bold my-2">
                   {gf} - {ga}
                 </div>
-                <div className="flex justify-center gap-2">
-                  <Button
-                    onClick={() => {
-                      setGf(0);
-                      setGa(0);
-                    }}
-                  >
-                    <RefreshCcw className="w-4 h-4 mr-1" />
-                    Nollaa
-                  </Button>
-                </div>
               </div>
+            </div>
+
+            {/* Maalintekijät-lista */}
+            <div className="mt-4">
+              <h3 className="text-sm font-bold mb-2 pl-1">Maalintekijät</h3>
+              {goals.length === 0 ? (
+                <p className="text-xs text-slate-500 pl-1">Ei maaleja vielä.</p>
+              ) : (
+<ul className="space-y-1 text-sm">
+  {goals.map((g, i) => (
+    <li key={g.id} className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-slate-500 w-6">{i + 1}.</span>
+
+      {editingGoalId === g.id ? (
+        <>
+          {/* editointi-mode (Select pudotusvalikko) */}
+          <Select
+            onValueChange={(pid) => {
+              updateGoalScorer(g.id, pid);
+              setEditingGoalId(null);
+            }}
+            placeholder="Valitse maalintekijä"
+          >
+            <SelectTrigger className="h-8 w-40" />
+            <SelectContent>
+              <SelectGroup>
+                {skaters.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button size="sm" variant="secondary" onClick={() => setEditingGoalId(null)}>
+            Peru
+          </Button>
+        </>
+      ) : (
+        <>
+          {/* Tässä näkyy nyt tekijän nimi */}
+          <span className="font-medium">{g.scorerName || "?"}</span>
+          <Badge className="app-badge">{g.team === "HOME" ? "Koti" : "Vieras"}</Badge>
+
+          <Button size="sm" onClick={() => setEditingGoalId(g.id)}>
+            Muokkaa
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => removeGoal(g.id)}>
+            Poista
+          </Button>
+        </>
+      )}
+    </li>
+  ))}
+</ul>
+
+
+              )}
             </div>
           </CardContent>
         </Card>
@@ -581,7 +725,9 @@ Pelaaja2
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Button onClick={exportState}>Vie kokoonpano (JSON)</Button>
+              <Button className="mx-2 my-1" onClick={exportState}>
+                Tallenna tulokset (JSON)
+              </Button>
 
               <input
                 ref={fileInputRef}
@@ -594,7 +740,7 @@ Pelaaja2
                   e.currentTarget.value = "";
                 }}
               />
-              <Button onClick={() => fileInputRef.current?.click()}>
+              <Button className="mx-1 my-1" onClick={() => fileInputRef.current?.click()}>
                 Tuo kokoonpano (JSON)
               </Button>
 
@@ -609,13 +755,12 @@ Pelaaja2
                   e.currentTarget.value = "";
                 }}
               />
-              <Button onClick={() => csvInputRef.current?.click()}>
+              <Button className="mx-1 my-1" onClick={() => csvInputRef.current?.click()}>
                 Tuo nimilista (CSV / txt)
               </Button>
             </div>
-            <p className="text-xs text-slate-500">
-              JSON-vienti sisältää kentät, penkin, maalivahdin, kenttäkoon ja
-              tulostaulun. CSV-tuonti lisää riveittäin nimet pelaajaluetteloon.
+            <p className="text-xs text-slate-500 leading-relaxed mt-3 mx-6">
+              Tallennus sisältää kentät, penkin, maalivahdin, kenttäkoon, tulostaulun ja maalintekijät.
             </p>
           </CardContent>
         </Card>
