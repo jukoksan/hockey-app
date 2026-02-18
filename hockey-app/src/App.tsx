@@ -114,7 +114,18 @@ export default function App() {
 
   const changeLineSize = (size: 3 | 4) => {
     setLineSize(size);
-    setTimeout(autoLines, 0);
+    // Käytetään uutta kokoa suoraan autoLines-logiikassa, ei closure-bugia
+    const ids = skaters.map((s) => s.id);
+    const numLines = Math.ceil(ids.length / size) || 1;
+    const newLines: string[][] = Array.from({ length: numLines }, () => []);
+    ids.forEach((id, i) => {
+      newLines[i % numLines].push(id);
+    });
+    const trimmed = newLines.map((L) => L.slice(0, size));
+    const used = new Set(trimmed.flat());
+    const newBench = ids.filter((id) => !used.has(id));
+    setLines(trimmed);
+    setBench(newBench);
   };
 
   const dragDataRef = useRef<{ playerId: string; from: string } | null>(null);
@@ -269,67 +280,68 @@ export default function App() {
   };
 
   // UUSI: lisää maali (kasvattaa myös GF/GA)
-const addGoal = (team: "HOME" | "AWAY", scorerId?: string) => {
-  const scorer = players.find((p) => p.id === scorerId);
-  const newGoal: Goal = {
-    id: crypto.randomUUID(),
-    team,
-    scorerId,
-    scorerName: scorer?.name || "",  // <- nimi talteen
+  const addGoal = (team: "HOME" | "AWAY", scorerId?: string) => {
+    const scorer = players.find((p) => p.id === scorerId);
+    const newGoal: Goal = {
+      id: crypto.randomUUID(),
+      team,
+      scorerId: scorerId || "",
+      scorerName: scorer?.name || "",  // <- nimi talteen
+    };
+    setGoals((prev) => [...prev, newGoal]);
+
+    if (team === "HOME") setGf((v) => v + 1);
+    else setGa((v) => v + 1);
   };
-  setGoals((prev) => [...prev, newGoal]);
 
-  if (team === "HOME") setGf((v) => v + 1);
-  else setGa((v) => v + 1);
-};
+  // Muokattavana olevan maalin id (null = ei muokkausta)
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
+  // Vaihda maalintekijä (ei muuta tulostaulua, vain tekijän tiedot)
+  function updateGoalScorer(goalId: string, newScorerId: string) {
+    const newName = nameById(newScorerId);
+    setGoals((prev) =>
+      prev.map((g) =>
+        g.id === goalId ? { ...g, scorerId: newScorerId, scorerName: newName } : g
+      )
+    );
+  }
 
-// Muokattavana olevan maalin id (null = ei muokkausta)
-const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
-
-// Vaihda maalintekijä (ei muuta tulostaulua, vain tekijän tiedot)
-function updateGoalScorer(goalId: string, newScorerId: string) {
-  const newName = nameById(newScorerId);
-  setGoals((prev) =>
-    prev.map((g) =>
-      g.id === goalId ? { ...g, scorerId: newScorerId, scorerName: newName } : g
-    )
-  );
-}
-
-// Poista tietty maali ja säädä GF/GA oikein
-function removeGoal(goalId: string) {
-  setGoals((prev) => {
-    const g = prev.find((x) => x.id === goalId);
-    if (!g) return prev;
-    if (g.team === "HOME") setGf((v) => Math.max(0, v - 1));
-    else setGa((v) => Math.max(0, v - 1));
-    return prev.filter((x) => x.id !== goalId);
-  });
-}
-
+  // Poista tietty maali ja säädä GF/GA oikein
+  function removeGoal(goalId: string) {
+    setGoals((prev) => {
+      const g = prev.find((x) => x.id === goalId);
+      if (!g) return prev;
+      if (g.team === "HOME") setGf((v) => Math.max(0, v - 1));
+      else setGa((v) => Math.max(0, v - 1));
+      return prev.filter((x) => x.id !== goalId);
+    });
+  }
 
   return (
     <div
       className="min-h-screen bg-yellow-400 bg-center bg-no-repeat bg-contain text-slate-900"
       style={{ backgroundImage: "url('/ilves-logo.jpg')" }}
+      data-testid="app-root"
     >
       <header className="sticky top-0 z-10 backdrop-blur bg-white/70 border-b">
         <div className="max-w-screen-md mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            <h1 className="font-semibold text-lg">Kentälliset &amp; Tulostaulu</h1>
+            <h1 className="font-semibold text-lg" data-testid="app-title">
+              Kentälliset &amp; Tulostaulu
+            </h1>
           </div>
           <div className="flex gap-2 items-center text-xs text-slate-600">
-            <Badge className="app-badge">Pelaajia: {players.length}</Badge>
-            <Badge className="app-badge">Kenttäpelaajia: {skaterCount}</Badge>
+            <Badge className="app-badge" data-testid="players-count">Pelaajia: {players.length}</Badge>
+            <Badge className="app-badge" data-testid="skaters-count">Kenttäpelaajia: {skaterCount}</Badge>
           </div>
         </div>
       </header>
 
       <main className="max-w-screen-md mx-auto p-4 space-y-4">
         {/* Syöttö & asetukset */}
-        <Card className="rounded-2xl shadow-lg">
+        <Card className="rounded-2xl shadow-lg" data-testid="section-inputs">
           <CardHeader>
             <CardTitle>1) Syötä pelaajat &amp; valitse maalivahti</CardTitle>
           </CardHeader>
@@ -340,6 +352,7 @@ function removeGoal(goalId: string) {
                   Lisää pelaajat:
                 </label>
                 <Textarea
+                  data-testid="names-textarea"
                   placeholder={`Pelaaja1
 Pelaaja2
 …`}
@@ -348,7 +361,7 @@ Pelaaja2
                 />
               </div>
               <div className="flex flex-col gap-2 pt-6">
-                <Button className="mx-1 my-1" onClick={addBulk}>
+                <Button className="mx-1 my-1" onClick={addBulk} data-testid="add-names">
                   <Plus className="w-4 h-4 mr-1" />
                   Lisää nimet
                 </Button>
@@ -361,6 +374,7 @@ Pelaaja2
                     setLines([]);
                     setBench([]);
                   }}
+                  data-testid="clear-roster"
                 >
                   <Trash2 className="w-4 h-4 mr-1" />
                   Tyhjennä kokoonpano
@@ -376,11 +390,11 @@ Pelaaja2
                   onValueChange={setGoalie}
                   placeholder="Valitse maalivahti"
                 >
-                  <SelectTrigger id="goalie" className="mx-1 my-1" />
+                  <SelectTrigger id="goalie" className="mx-1 my-1" data-testid="select-goalie-trigger" />
                   <SelectContent>
                     <SelectGroup>
                       {candidateGoalies.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
+                        <SelectItem key={p.id} value={p.id} data-testid={`select-goalie-option-${p.id}`}>
                           {p.name}
                         </SelectItem>
                       ))}
@@ -388,7 +402,7 @@ Pelaaja2
                   </SelectContent>
                 </Select>
 
-                <p className="text-xs text-slate-500 leading-relaxed mt-1 mx-5">
+                <p className="text-xs text-slate-500 leading-relaxed mt-1 mx-5" data-testid="goalie-help">
                   Maalivahti pysyy samana eikä ole mukana kentällisissä.
                 </p>
               </div>
@@ -398,14 +412,15 @@ Pelaaja2
                 <Tabs
                   value={String(lineSize)}
                   onValueChange={(v) => changeLineSize(Number(v) as 3 | 4)}
+                  data-testid="tabs-line-size"
                 >
-                    {/* Siirretty oikealle marginaalilla */}
-                    <TabsList className="ml-2">
-                    <TabsTrigger value="3">3 pelaajaa</TabsTrigger>
-                    <TabsTrigger value="4">4 pelaajaa</TabsTrigger>
+                  {/* Siirretty oikealle marginaalilla */}
+                  <TabsList className="ml-2">
+                    <TabsTrigger value="3" data-testid="line-size-3">3 pelaajaa</TabsTrigger>
+                    <TabsTrigger value="4" data-testid="line-size-4">4 pelaajaa</TabsTrigger>
                   </TabsList>
                 </Tabs>
-                <Button className="mt-2 mx-1 my-1" onClick={autoLines}>
+                <Button className="mt-2 mx-1 my-1" onClick={autoLines} data-testid="auto-lines">
                   <Save className="w-4 h-4 mr-1" />
                   Muodosta kentät automaattisesti
                 </Button>
@@ -414,11 +429,12 @@ Pelaaja2
 
             {/* Pelaajaluettelo */}
             {players.length > 0 && (
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid="players-list">
                 {players.map((p) => (
                   <div
                     key={p.id}
                     className="flex items-center justify-between rounded-xl border p-2 bg-white"
+                    data-testid={`player-row-${p.id}`}
                   >
                     <div className="flex items-center gap-2">
                       <Badge className="app-badge">
@@ -433,11 +449,17 @@ Pelaaja2
                           onClick={() =>
                             setBench((B) => (B.includes(p.id) ? B : [...B, p.id]))
                           }
+                          data-testid={`to-bench-${p.id}`}
                         >
                           Penkille
                         </Button>
                       )}
-                      <Button size="sm" variant="destructive" onClick={() => removePlayer(p.id)}>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => removePlayer(p.id)}
+                        data-testid={`remove-player-${p.id}`}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -449,23 +471,24 @@ Pelaaja2
         </Card>
 
         {/* Kentälliset & penkki */}
-        <Card className="rounded-2xl shadow-lg">
+        <Card className="rounded-2xl shadow-lg" data-testid="section-lines">
           <CardHeader>
             <CardTitle>2) Kentälliset &amp; vaihdot</CardTitle>
           </CardHeader>
         <CardContent className="space-y-4">
             <div className="text-xs text-slate-500 leading-relaxed mt-1 mx-5">
               Vedä ja pudota pelaajia kenttien ja penkin välillä. Maalivahti:{" "}
-              <strong>{goalieName}</strong>.
+              <strong data-testid="goalie-name">{goalieName}</strong>.
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="lines-grid">
               {lines.map((L, idx) => (
                 <div
                   key={idx}
                   className="rounded-2xl border bg-white"
                   onDragOver={onDragOver}
                   onDrop={dropToLine(idx)}
+                  data-testid={`line-${idx}`}
                 >
                   <div className="px-3 py-2 border-b flex items-center justify-between">
                     <div className="font-medium">
@@ -485,11 +508,13 @@ Pelaaja2
                         name={nameById(pid)}
                         draggable
                         onDragStart={onDragStart(pid, `line:${idx}`)}
+                        dataTestId={`line-slot-${idx}-${pid}`}
                       >
                         <Button
                           size="sm"
                           onClick={() => removeFromLine(idx, pid)}
                           className="ml-2"
+                          data-testid={`to-bench-from-line-${idx}-${pid}`}
                         >
                           <ArrowLeftRight className="w-3 h-3 mr-1" />
                           Penkille
@@ -501,6 +526,7 @@ Pelaaja2
                         <span
                           key={i}
                           className="inline-flex items-center justify-center text-xs text-slate-400 border rounded-full px-3 py-1"
+                          data-testid={`line-empty-${idx}-${i}`}
                         >
                           Tyhjä
                         </span>
@@ -511,9 +537,9 @@ Pelaaja2
               ))}
 
               {/* Lisää uusi kenttä */}
-              <div className="rounded-2xl border bg-white p-3 flex flex-col justify-between">
+              <div className="rounded-2xl border bg-white p-3 flex flex-col justify-between" data-testid="add-line-card">
                 <div className="font-medium mb-2 ml-1">Uusi kenttä</div>
-                <Button className="mx-1" onClick={() => setLines((LL) => [...LL, []])}>
+                <Button className="mx-1" onClick={() => setLines((LL) => [...LL, []])} data-testid="add-line">
                   <Plus className="w-4 h-4 mr-1" />
                   Lisää kenttä
                 </Button>
@@ -525,6 +551,7 @@ Pelaaja2
               className="rounded-2xl border bg-white"
               onDragOver={onDragOver}
               onDrop={dropToBench}
+              data-testid="bench"
             >
               <div className="px-3 py-2 border-b font-medium">Penkki</div>
               <div className="p-3 flex flex-wrap gap-2 min-h-[64px]">
@@ -534,10 +561,11 @@ Pelaaja2
                     name={nameById(pid)}
                     draggable
                     onDragStart={onDragStart(pid, "bench")}
+                    dataTestId={`bench-item-${pid}`}
                   >
                     <div className="flex gap-2 ml-2">
                       {lines.map((_, i) => (
-                        <Button key={i} size="sm" onClick={() => addToLine(i, pid)}>
+                        <Button key={i} size="sm" onClick={() => addToLine(i, pid)} data-testid={`to-line-${i}-from-bench-${pid}`}>
                           Kenttä {i + 1}
                         </Button>
                       ))}
@@ -545,7 +573,7 @@ Pelaaja2
                   </PlayerChip>
                 ))}
                 {bench.length === 0 && (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-400" data-testid="bench-empty">
                     Ei varapelaajia penkillä.
                   </span>
                 )}
@@ -555,74 +583,70 @@ Pelaaja2
         </Card>
 
         {/* Tulostaulu + maalintekijät */}
-        <Card className="rounded-2xl shadow-lg">
+        <Card className="rounded-2xl shadow-lg" data-testid="scoreboard">
           <CardHeader>
             <CardTitle>3) Tulostaulu</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+
               {/* KOTI */}
-              <div className="rounded-xl border bg-white p-4 text-center">
-                <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">
-                  KOTI
-                </div>
-                <div className="text-5xl font-bold my-2">{gf}</div>
+              <div className="rounded-xl border bg-white p-4 text-center" data-testid="score-home">
+                <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">KOTI</div>
+                <div className="text-5xl font-bold my-2" data-testid="home-value">{gf}</div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex justify-center gap-2">
-                    <Button onClick={() => setGf((v) => v + 1)}>
+                    <Button data-testid="inc-home" onClick={() => setGf(v => v + 1)}>
                       <PlusCircle className="w-4 h-4 mr-1" />
                     </Button>
-                    <Button onClick={() => setGf((v) => Math.max(0, v - 1))}>
+                    <Button data-testid="dec-home" onClick={() => setGf(v => Math.max(0, v - 1))}>
                       <MinusCircle className="w-4 h-4 mr-1" />
-                      
                     </Button>
                   </div>
-                  {/* Lisää maali + valitse tekijä */}
-                  <Button onClick={() => setShowHomeScorer((v) => !v)}>
+                  <Button data-testid="add-goal-home" onClick={() => setShowHomeScorer(v => !v)}>
                     Maalintekijä
                   </Button>
                   {showHomeScorer && (
-                    <Select
-                      onValueChange={(pid) => {
-                        addGoal("HOME", pid);
-                        setShowHomeScorer(false);
-                      }}
-                      placeholder="Valitse maalintekijä"
-                    >
-                      <SelectTrigger className="mx-1 my-1" />
-                      <SelectContent>
-                        <SelectGroup>
-                          {skaters.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
+                    <Select onValueChange={(pid) => { addGoal("HOME", pid); setShowHomeScorer(false); }}
+                            placeholder="Valitse maalintekijä"
+                            >
+                              <SelectTrigger className="mx-1 my-1" data-testid="home-scorer-trigger" />
+                              <SelectContent>
+                                <SelectGroup>
+                                  {skaters.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      </div>
 
               {/* VIERAS */}
-              <div className="rounded-xl border bg-white p-4 text-center">
+              <div className="rounded-xl border bg-white p-4 text-center" data-testid="away-card">
                 <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">
                   VIERAS
                 </div>
-                <div className="text-5xl font-bold my-2">{ga}</div>
+                <div className="text-5xl font-bold my-2" data-testid="away-value">{ga}</div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex justify-center gap-2">
-                    <Button onClick={() => setGa((v) => v + 1)}>
+                    <Button onClick={() => setGa((v) => v + 1)} data-testid="away-plus">
                       <PlusCircle className="w-4 h-4 mr-1" />
                     </Button>
-                    <Button onClick={() => setGa((v) => Math.max(0, v - 1))}>
+                    <Button onClick={() => setGa((v) => Math.max(0, v - 1))} data-testid="away-minus">
                       <MinusCircle className="w-4 h-4 mr-1" />
-                      
                     </Button>
                   </div>
-                  <Button onClick={() => setShowAwayScorer((v) => !v)}>
+                  <Button
+                    data-testid="add-goal-away"
+                    onClick={() => setShowAwayScorer(true)}
+                  >
                     Maalintekijä
                   </Button>
+
                   {showAwayScorer && (
                     <Select
                       onValueChange={(pid) => {
@@ -631,7 +655,10 @@ Pelaaja2
                       }}
                       placeholder="Valitse maalintekijä"
                     >
-                      <SelectTrigger className="mx-1 my-1" />
+                      <SelectTrigger
+                        className="mx-1 my-1"
+                        data-testid="away-scorer-trigger"
+                      />
                       <SelectContent>
                         <SelectGroup>
                           {skaters.map((p) => (
@@ -643,89 +670,88 @@ Pelaaja2
                       </SelectContent>
                     </Select>
                   )}
+
                 </div>
               </div>
 
               {/* TILANNE */}
-              <div className="rounded-xl border bg-white p-4 text-center">
+              <div className="rounded-xl border bg-white p-4 text-center" data-testid="score-card">
                 <div className="text-xs uppercase tracking-wide text-slate-700 font-bold">
                   TILANNE
                 </div>
-                <div className="text-4xl font-bold my-2">
+                <div className="text-4xl font-bold my-2" data-testid="score-value">
                   {gf} - {ga}
                 </div>
               </div>
             </div>
 
             {/* Maalintekijät-lista */}
-            <div className="mt-4">
+            <div className="mt-4" data-testid="goals-list">
               <h3 className="text-sm font-bold mb-2 pl-1">Maalintekijät</h3>
               {goals.length === 0 ? (
-                <p className="text-xs text-slate-500 pl-1">Ei maaleja vielä.</p>
+                <p className="text-xs text-slate-500 pl-1" data-testid="goals-empty">Ei maaleja vielä.</p>
               ) : (
-<ul className="space-y-1 text-sm">
-  {goals.map((g, i) => (
-    <li key={g.id} className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-slate-500 w-6">{i + 1}.</span>
+                <ul className="space-y-1 text-sm">
+                  {goals.map((g, i) => (
+                    <li key={g.id} className="flex flex-wrap items-center gap-2" data-testid={`goal-item-${g.id}`}>
+                      <span className="text-xs text-slate-500 w-6">{i + 1}.</span>
 
-      {editingGoalId === g.id ? (
-        <>
-          {/* editointi-mode (Select pudotusvalikko) */}
-          <Select
-            onValueChange={(pid) => {
-              updateGoalScorer(g.id, pid);
-              setEditingGoalId(null);
-            }}
-            placeholder="Valitse maalintekijä"
-          >
-            <SelectTrigger className="h-8 w-40" />
-            <SelectContent>
-              <SelectGroup>
-                {skaters.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+                      {editingGoalId === g.id ? (
+                        <>
+                          {/* editointi-mode (Select pudotusvalikko) */}
+                          <Select
+                            onValueChange={(pid) => {
+                              updateGoalScorer(g.id, pid);
+                              setEditingGoalId(null);
+                            }}
+                            placeholder="Valitse maalintekijä"
+                          >
+                            <SelectTrigger className="h-8 w-40" data-testid={`goal-edit-trigger-${g.id}`} />
+                            <SelectContent>
+                              <SelectGroup>
+                                {skaters.map((p) => (
+                                  <SelectItem key={p.id} value={p.id} data-testid={`goal-edit-option-${g.id}-${p.id}`}>
+                                    {p.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
 
-          <Button size="sm" variant="secondary" onClick={() => setEditingGoalId(null)}>
-            Peru
-          </Button>
-        </>
-      ) : (
-        <>
-          {/* Tässä näkyy nyt tekijän nimi */}
-          <span className="font-medium">{g.scorerName || "?"}</span>
-          <Badge className="app-badge">{g.team === "HOME" ? "Koti" : "Vieras"}</Badge>
+                          <Button size="sm" variant="secondary" onClick={() => setEditingGoalId(null)} data-testid={`goal-edit-cancel-${g.id}`}>
+                            Peru
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          {/* Tässä näkyy nyt tekijän nimi */}
+                          <span className="font-medium" data-testid={`goal-scorer-${g.id}`}>{g.scorerName || "?"}</span>
+                          <Badge className="app-badge" data-testid={`goal-team-${g.id}`}>{g.team === "HOME" ? "Koti" : "Vieras"}</Badge>
 
-          <Button size="sm" onClick={() => setEditingGoalId(g.id)}>
-            Muokkaa
-          </Button>
-          <Button size="sm" variant="destructive" onClick={() => removeGoal(g.id)}>
-            Poista
-          </Button>
-        </>
-      )}
-    </li>
-  ))}
-</ul>
-
-
+                          <Button size="sm" onClick={() => setEditingGoalId(g.id)} data-testid={`goal-edit-${g.id}`}>
+                            Muokkaa
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => removeGoal(g.id)} data-testid={`goal-delete-${g.id}`}>
+                            Poista
+                          </Button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Tuonti / Vienti */}
-        <Card className="rounded-2xl shadow-lg">
+        <Card className="rounded-2xl shadow-lg" data-testid="section-import-export">
           <CardHeader>
             <CardTitle>4) Tuonti &amp; vienti</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Button className="mx-2 my-1" onClick={exportState}>
+              <Button className="mx-2 my-1" onClick={exportState} data-testid="export-json">
                 Tallenna tulokset (JSON)
               </Button>
 
@@ -739,8 +765,9 @@ Pelaaja2
                   if (f) importJson(f);
                   e.currentTarget.value = "";
                 }}
+                data-testid="json-file-input"
               />
-              <Button className="mx-1 my-1" onClick={() => fileInputRef.current?.click()}>
+              <Button className="mx-1 my-1" onClick={() => fileInputRef.current?.click()} data-testid="import-json">
                 Tuo kokoonpano (JSON)
               </Button>
 
@@ -754,8 +781,9 @@ Pelaaja2
                   if (f) importCsvNames(f);
                   e.currentTarget.value = "";
                 }}
+                data-testid="csv-file-input"
               />
-              <Button className="mx-1 my-1" onClick={() => csvInputRef.current?.click()}>
+              <Button className="mx-1 my-1" onClick={() => csvInputRef.current?.click()} data-testid="import-csv">
                 Tuo nimilista (CSV / txt)
               </Button>
             </div>
@@ -766,7 +794,7 @@ Pelaaja2
         </Card>
 
         <div className="flex justify-end">
-          <Button onClick={resetAll}>
+          <Button onClick={resetAll} data-testid="reset-all">
             <RefreshCcw className="w-4 h-4 mr-1" />
             Nollaa kaikki
           </Button>
@@ -788,11 +816,13 @@ function PlayerChip({
   draggable,
   onDragStart,
   children,
+  dataTestId,
 }: {
   name: string;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   children?: React.ReactNode;
+  dataTestId?: string;
 }) {
   return (
     <div
@@ -800,6 +830,7 @@ function PlayerChip({
       draggable={draggable}
       onDragStart={onDragStart}
       title="Vedä siirtääksesi"
+      data-testid={dataTestId}
     >
       <span className="text-sm">{name}</span>
       {children}
