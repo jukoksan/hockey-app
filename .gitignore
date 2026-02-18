@@ -1,0 +1,4 @@
+browser/screenshot/fail-screenshot-2.png
+*.png
+playwright-log.txt
+output.xml

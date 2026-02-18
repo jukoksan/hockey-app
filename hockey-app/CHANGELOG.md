@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-02-18
+### Fixed
+- UI parannukset
+
 ## [1.0.0] - 2025-08-27
 ### Fixed
 - UI parannukset ja maalintekijät lisätty
